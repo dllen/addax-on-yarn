@@ -4,12 +4,18 @@ import com.github.dllen.ApplicationMaster;
 import com.google.common.collect.Maps;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
+import io.vertx.core.Promise;
+import io.vertx.core.Vertx;
+import io.vertx.core.VertxOptions;
 import io.vertx.core.http.HttpServer;
 import io.vertx.core.json.JsonObject;
 import io.vertx.ext.web.Router;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ *
+ */
 public class AddaxManagerHttpServer extends AbstractVerticle {
 
     static final Logger LOGGER = LoggerFactory.getLogger(AddaxManagerHttpServer.class);
@@ -27,7 +33,9 @@ public class AddaxManagerHttpServer extends AbstractVerticle {
         return port;
     }
 
-    public void start() {
+    @Override
+    public void start(Promise<Void> startPromise) throws Exception {
+        super.start(startPromise);
         String routePrefix = "/addax-server/";
         server = vertx.createHttpServer();
         Router router = Router.router(vertx);
@@ -56,6 +64,17 @@ public class AddaxManagerHttpServer extends AbstractVerticle {
         });
 
         server.requestHandler(router).listen(port);
+    }
+
+    @Override
+    public void stop(Promise<Void> stopPromise) throws Exception {
+        super.stop(stopPromise);
+        stop();
+    }
+
+    public void start() {
+        vertx = Vertx.vertx(new VertxOptions());
+        vertx.deployVerticle(this);
     }
 
     public void stop() {

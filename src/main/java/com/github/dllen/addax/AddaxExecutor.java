@@ -8,7 +8,9 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
 
-
+/**
+ *
+ */
 public class AddaxExecutor {
 
     private static final Log LOG = LogFactory.getLog(AddaxExecutor.class);
@@ -19,6 +21,7 @@ public class AddaxExecutor {
         int port = FreePortFinder.findFreeLocalPort(9090);
         AddaxExecutorHttpServer addaxExecutorHttpServer = new AddaxExecutorHttpServer(masterAddr, port, containerId);
         addaxExecutorHttpServer.start();
+
     }
 
     public static String getCurrentUserName() throws Exception {

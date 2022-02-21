@@ -18,10 +18,12 @@ import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
+/**
+ *
+ */
 public class AddaxEngine extends Engine {
 
-    private final static Logger logger = LoggerFactory.getLogger(AddaxEngine.class);
+    static final Logger LOGGER = LoggerFactory.getLogger(AddaxEngine.class);
 
     private final String reportAddr;
 
@@ -98,7 +100,7 @@ public class AddaxEngine extends Engine {
             configuration.merge(ConfigParser.parsePluginConfig(new ArrayList<>(pluginList)), false);
         } catch (Exception e) {
             //吞掉异常，保持log干净。这里message足够。
-            logger.warn(String.format("插件[%s,%s]加载失败，1s后重试... Exception:%s ", readerPluginName, writerPluginName, e.getMessage()));
+            LOGGER.warn(String.format("插件[%s,%s]加载失败，1s后重试... Exception:%s ", readerPluginName, writerPluginName, e.getMessage()));
             try {
                 Thread.sleep(1000);
             } catch (InterruptedException e1) {
@@ -110,12 +112,12 @@ public class AddaxEngine extends Engine {
         //打印vmInfo
         VMInfo vmInfo = VMInfo.getVmInfo();
         if (vmInfo != null) {
-            logger.info(vmInfo.toString());
+            LOGGER.info(vmInfo.toString());
         }
-        logger.info("设置jobId:{}", jobId);
+        LOGGER.info("设置jobId:{}", jobId);
         configuration.set(CoreConstant.CORE_CONTAINER_JOB_ID, jobId);
-        logger.info("\n" + AddaxEngine.filterJobConfiguration(configuration) + "\n");
-        logger.debug(configuration.toJSON());
+        LOGGER.info("\n" + AddaxEngine.filterJobConfiguration(configuration) + "\n");
+        LOGGER.debug(configuration.toJSON());
         ConfigurationValidate.doValidate(configuration);
         start(configuration);
     }

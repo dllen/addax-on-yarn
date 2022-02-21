@@ -20,6 +20,7 @@
 		<hadoop.version>2.6.5</hadoop.version>
 		<vertx.version>4.2.5</vertx.version>
 		<addax.version>4.0.7</addax.version>
+		<checkstyle.skip>true</checkstyle.skip>
 	</properties>
 
 	<dependencies>

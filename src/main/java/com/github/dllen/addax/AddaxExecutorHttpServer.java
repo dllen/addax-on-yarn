@@ -3,6 +3,9 @@ package com.github.dllen.addax;
 import com.google.common.collect.Maps;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
+import io.vertx.core.Promise;
+import io.vertx.core.Vertx;
+import io.vertx.core.VertxOptions;
 import io.vertx.core.http.HttpServer;
 import io.vertx.ext.web.Router;
 import java.util.Map;
@@ -11,6 +14,9 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ *
+ */
 public class AddaxExecutorHttpServer extends AbstractVerticle {
 
     private final String masterAddr;
@@ -19,8 +25,8 @@ public class AddaxExecutorHttpServer extends AbstractVerticle {
 
     static final AtomicInteger ID_GEN = new AtomicInteger();
 
-    static int STATUS_DOING = 1;
-    static int STATUS_FREE = 0;
+    static final int STATUS_DOING = 1;
+    static final int STATUS_FREE = 0;
 
     static final AtomicInteger EXECUTOR_STATUS = new AtomicInteger(STATUS_FREE);
 
@@ -32,7 +38,7 @@ public class AddaxExecutorHttpServer extends AbstractVerticle {
         this.port = port;
         HEARTBEAT_BODY.put("containerId", containerId);
         HEARTBEAT_BODY.put("port", port);
-
+        startHeartbeatTask();
     }
 
     //定期上报心跳信息: port, containerId...
@@ -40,7 +46,9 @@ public class AddaxExecutorHttpServer extends AbstractVerticle {
         SCHEDULED_EXECUTOR_SERVICE.scheduleWithFixedDelay(() -> AddaxPigeon.INSTANCE.sendHeartbeat(HEARTBEAT_BODY, masterAddr), 10, 30, TimeUnit.SECONDS);
     }
 
-    public void start() {
+    @Override
+    public void start(Promise<Void> startPromise) throws Exception {
+        super.start(startPromise);
         String routePrefix = "/addax-executor/";
         server = vertx.createHttpServer();
         Router router = Router.router(vertx);
@@ -60,6 +68,17 @@ public class AddaxExecutorHttpServer extends AbstractVerticle {
             return Future.failedFuture("稍后重试！");
         });
         server.requestHandler(router).listen(port);
+    }
+
+    @Override
+    public void stop(Promise<Void> stopPromise) throws Exception {
+        super.stop(stopPromise);
+        stop();
+    }
+
+    public void start() {
+        vertx = Vertx.vertx(new VertxOptions());
+        vertx.deployVerticle(this);
     }
 
     public void stop() {

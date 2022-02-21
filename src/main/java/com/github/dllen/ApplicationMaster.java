@@ -754,20 +754,16 @@ public class ApplicationMaster {
                 throw new RuntimeException(Constants.JAR_FILE_PATH + " not set in the environment.");
             }
             String frameworkPath = currentEnvs.get(Constants.JAR_FILE_PATH);
-
             shellEnv.put("CLASSPATH", YarnHelper.buildClassPathEnv(conf));
-
             // Set the local resources
             Map<String, LocalResource> localResources = new HashMap<>(4);
-
-            try {
-                YarnHelper.addFrameworkToDistributedCache(frameworkPath, localResources, conf);
-            } catch (IOException e) {
-                Throwables.propagate(e);
-            }
-
+//            try {
+//                YarnHelper.addFrameworkToDistributedCache(frameworkPath, localResources, conf);
+//            } catch (IOException e) {
+//                Throwables.propagate(e);
+//            }
             // Set the necessary command to execute on the allocated container
-            Vector<CharSequence> vargs = new Vector<CharSequence>(10);
+            Vector<CharSequence> vargs = new Vector<>(10);
 
             // Set java executable command
             vargs.add(ApplicationConstants.Environment.JAVA_HOME.$$() + "/bin/java");

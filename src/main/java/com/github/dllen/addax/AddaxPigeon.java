@@ -1,16 +1,22 @@
 package com.github.dllen.addax;
 
-import io.vertx.core.AbstractVerticle;
+import io.vertx.core.Vertx;
+import io.vertx.core.VertxOptions;
 import io.vertx.ext.web.client.WebClient;
 import java.util.Map;
 
-public class AddaxPigeon extends AbstractVerticle {
+/**
+ *
+ */
+public class AddaxPigeon {
 
-    public static AddaxPigeon INSTANCE = new AddaxPigeon();
+    public static final AddaxPigeon INSTANCE = new AddaxPigeon();
 
-    WebClient webClient = WebClient.create(vertx);
+    private final WebClient webClient;
 
     private AddaxPigeon() {
+        Vertx vertx = Vertx.vertx(new VertxOptions());
+        webClient = WebClient.create(vertx);
     }
 
     public void sendHeartbeat(Map<String, Object> data, String masterAddr) {
