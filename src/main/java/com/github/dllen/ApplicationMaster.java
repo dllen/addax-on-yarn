@@ -6,6 +6,7 @@ import com.github.dllen.utils.NetworkUtils;
 import com.github.dllen.utils.YarnHelper;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Throwables;
+import io.vertx.core.Vertx;
 import java.io.BufferedReader;
 import java.io.DataInputStream;
 import java.io.File;
@@ -27,11 +28,16 @@ import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.HelpFormatter;
 import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileContext;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.net.NetUtils;
@@ -57,10 +63,13 @@ import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
 import org.apache.hadoop.yarn.api.records.LocalResource;
+import org.apache.hadoop.yarn.api.records.LocalResourceType;
+import org.apache.hadoop.yarn.api.records.LocalResourceVisibility;
 import org.apache.hadoop.yarn.api.records.NodeReport;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
+import org.apache.hadoop.yarn.api.records.URL;
 import org.apache.hadoop.yarn.client.api.AMRMClient.ContainerRequest;
 import org.apache.hadoop.yarn.client.api.async.AMRMClientAsync;
 import org.apache.hadoop.yarn.client.api.async.NMClientAsync;
@@ -69,6 +78,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
 import org.apache.hadoop.yarn.util.ConverterUtils;
+import org.apache.hadoop.yarn.util.Records;
 import org.apache.log4j.LogManager;
 
 /**
@@ -207,6 +217,9 @@ public class ApplicationMaster {
     // Container memory overhead in MB
     private int memoryOverhead = 384;
 
+    // vertx
+    static final Vertx vertx = Vertx.vertx();
+
     public static void main(String[] args) {
         boolean result = false;
         try {
@@ -289,8 +302,7 @@ public class ApplicationMaster {
 
         if (args.length == 0) {
             printUsage(opts);
-            throw new IllegalArgumentException(
-                "No args specified for application master to initialize");
+            throw new IllegalArgumentException("No args specified for application master to initialize");
         }
 
         //Check whether customer log4j.properties file exists
@@ -318,8 +330,7 @@ public class ApplicationMaster {
                 String appIdStr = cliParser.getOptionValue("app_attempt_id", "");
                 appAttemptID = ConverterUtils.toApplicationAttemptId(appIdStr);
             } else {
-                throw new IllegalArgumentException(
-                    "Application Attempt Id not set in the environment");
+                throw new IllegalArgumentException("Application Attempt Id not set in the environment");
             }
         } else {
             ContainerId containerId = ConverterUtils.toContainerId(envs.get(Environment.CONTAINER_ID.name()));
@@ -438,7 +449,7 @@ public class ApplicationMaster {
         nmClientAsync.start();
 
         httpServer = new AddaxManagerHttpServer(DEFAULT_APP_MASTER_TRACKING_URL_PORT, this);
-        httpServer.start();
+        vertx.deployVerticle(httpServer);
 
         appMasterHostname = NetUtils.getHostname();
         appMasterTrackingUrl = "http://" + NetworkUtils.getLocalHostIP() + ":" + httpServer.getPort();
@@ -550,7 +561,7 @@ public class ApplicationMaster {
         }
 
         amRMClient.stop();
-        httpServer.stop();
+        vertx.close();
 
         return success;
     }
@@ -563,8 +574,7 @@ public class ApplicationMaster {
         @SuppressWarnings("unchecked")
         @Override
         public void onContainersCompleted(List<ContainerStatus> completedContainers) {
-            LOG.info("Got response from RM for container ask, completedCnt="
-                + completedContainers.size());
+            LOG.info("Got response from RM for container ask, completedCnt=" + completedContainers.size());
             for (ContainerStatus containerStatus : completedContainers) {
                 LOG.info(appAttemptID + " got container status for containerID="
                     + containerStatus.getContainerId() + ", state="
@@ -602,7 +612,7 @@ public class ApplicationMaster {
             }
 
             // ask for more containers if any failed
-            askMoreContainersIfNecessary();
+            // askMoreContainersIfNecessary();
         }
 
         @Override
@@ -656,7 +666,7 @@ public class ApplicationMaster {
         public void onError(Throwable e) {
             done = true;
             amRMClient.stop();
-            httpServer.stop();
+            vertx.close();
         }
     }
 
@@ -757,11 +767,26 @@ public class ApplicationMaster {
             shellEnv.put("CLASSPATH", YarnHelper.buildClassPathEnv(conf));
             // Set the local resources
             Map<String, LocalResource> localResources = new HashMap<>(4);
-//            try {
-//                YarnHelper.addFrameworkToDistributedCache(frameworkPath, localResources, conf);
-//            } catch (IOException e) {
-//                Throwables.propagate(e);
-//            }
+            try {
+                String addaxPath = "/app/hamal/addax/addax-4.0.9.zip";
+                LocalResource addaxResource = Records.newRecord(LocalResource.class);
+                URL packageUrl = ConverterUtils.getYarnUrlFromPath(FileContext.getFileContext().makeQualified(new Path(addaxPath)));
+                FileStatus archiveStat = FileSystem.get(conf).getFileStatus(new Path(addaxPath));
+                addaxResource.setResource(packageUrl);
+                addaxResource.setType(LocalResourceType.ARCHIVE);
+                addaxResource.setVisibility(LocalResourceVisibility.APPLICATION);
+                addaxResource.setTimestamp(archiveStat.getModificationTime());
+                addaxResource.setSize(archiveStat.getLen());
+                localResources.put("addax", addaxResource);
+            } catch (Exception e) {
+                Throwables.propagate(e);
+            }
+
+            try {
+                YarnHelper.addFrameworkToDistributedCache(frameworkPath, localResources, conf);
+            } catch (IOException e) {
+                Throwables.propagate(e);
+            }
             // Set the necessary command to execute on the allocated container
             Vector<CharSequence> vargs = new Vector<>(10);
 
@@ -774,18 +799,19 @@ public class ApplicationMaster {
 
             // Set tmp dir
             vargs.add("-Djava.io.tmpdir=$PWD/tmp");
-            vargs.add("-Daddax.home=/media/disk1/addax/4.0.9");
-
+            vargs.add("-Daddax.home=$PWD/addax/addax-4.0.9-SNAPSHOT");
             // Set log4j configuration file
             // vargs.add("-Dlog4j.configuration=" + Constants.NESTO_YARN_APPCONTAINER_LOG4J);
 
             // Set class name
             vargs.add(Constants.EXECUTOR_MAIN_CLASS);
-            String masterAddr = "http://" + NetworkUtils.getHostName() + ":" + DEFAULT_APP_MASTER_TRACKING_URL_PORT + "/addax-server/";
+            String masterAddr = NetworkUtils.getHostName() + ":" + DEFAULT_APP_MASTER_TRACKING_URL_PORT;
             vargs.add(masterAddr);
             vargs.add(container.getId().getContainerId() + "");
-            // Set args for the shell command if any
-            vargs.add(shellArgs);
+            if (StringUtils.isNotEmpty(shellArgs)) {
+                // Set args for the shell command if any
+                vargs.add(shellArgs);
+            }
             // Add log redirect params
             vargs.add("1>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout");
             vargs.add("2>" + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr");

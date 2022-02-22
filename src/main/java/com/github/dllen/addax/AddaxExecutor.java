@@ -1,6 +1,7 @@
 package com.github.dllen.addax;
 
 import com.github.dllen.utils.FreePortFinder;
+import io.vertx.core.Vertx;
 import java.security.PrivilegedAction;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -15,13 +16,14 @@ public class AddaxExecutor {
 
     private static final Log LOG = LogFactory.getLog(AddaxExecutor.class);
 
+    static final Vertx vertx = Vertx.vertx();
+
     public static void run(String[] args) {
         String masterAddr = args[0];
         String containerId = args[1];
-        int port = FreePortFinder.findFreeLocalPort(9090);
+        int port = FreePortFinder.findFreeLocalPort(8190);
         AddaxExecutorHttpServer addaxExecutorHttpServer = new AddaxExecutorHttpServer(masterAddr, port, containerId);
-        addaxExecutorHttpServer.start();
-
+        vertx.deployVerticle(addaxExecutorHttpServer);
     }
 
     public static String getCurrentUserName() throws Exception {

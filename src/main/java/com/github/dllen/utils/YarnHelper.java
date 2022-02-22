@@ -23,18 +23,11 @@ import org.apache.hadoop.yarn.util.ConverterUtils;
 public class YarnHelper {
 
     public static String buildClassPathEnv(Configuration conf) {
-        StringBuilder classPathEnv = new StringBuilder(ApplicationConstants.Environment.CLASSPATH.$$())
-            .append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("$PWD/log4j.properties")
-            .append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("$PWD")
-            .append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("$HADOOP_CLIENT_CONF_DIR")
-            .append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("$HADOOP_CONF_DIR")
-            .append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("$JAVA_HOME/lib/tools.jar")
-            .append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("$PWD/")
-            .append(Constants.JAR_FILE_LINKED_NAME).append("/")
-            .append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("$PWD/")
-            .append(Constants.JAR_FILE_LINKED_NAME).append("/conf/")
-            .append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("$PWD/")
-            .append(Constants.JAR_FILE_LINKED_NAME).append("/*");
+        StringBuilder classPathEnv = new StringBuilder(ApplicationConstants.Environment.CLASSPATH.$$()).append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("$PWD/log4j.properties")
+            .append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("$PWD").append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("$HADOOP_CLIENT_CONF_DIR")
+            .append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("$HADOOP_CONF_DIR").append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("$JAVA_HOME/lib/tools.jar")
+            .append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("$PWD/").append(Constants.JAR_FILE_LINKED_NAME).append("/").append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("$PWD/")
+            .append(Constants.JAR_FILE_LINKED_NAME).append("/conf/").append(ApplicationConstants.CLASS_PATH_SEPARATOR).append("$PWD/").append(Constants.JAR_FILE_LINKED_NAME).append("/*");
         for (String c : conf.getStrings(YarnConfiguration.YARN_APPLICATION_CLASSPATH, YarnConfiguration.DEFAULT_YARN_CROSS_PLATFORM_APPLICATION_CLASSPATH)) {
             classPathEnv.append(ApplicationConstants.CLASS_PATH_SEPARATOR);
             classPathEnv.append(c.trim());
@@ -42,21 +35,17 @@ public class YarnHelper {
         return classPathEnv.toString();
     }
 
-    public static void addFrameworkToDistributedCache(String javaPathInHdfs,
-        Map<String, LocalResource> localResources,
-        Configuration conf) throws IOException {
+    public static void addFrameworkToDistributedCache(String javaPathInHdfs, Map<String, LocalResource> localResources, Configuration conf) throws IOException {
         URI uri;
         try {
             uri = new URI(javaPathInHdfs);
         } catch (URISyntaxException e) {
-            throw new IllegalArgumentException("Unable to parse '" + javaPathInHdfs
-                + "' as a URI.");
+            throw new IllegalArgumentException("Unable to parse '" + javaPathInHdfs + "' as a URI.");
         }
 
         Path path = new Path(uri.getScheme(), uri.getAuthority(), uri.getPath());
         FileSystem fs = path.getFileSystem(conf);
-        Path frameworkPath = fs.makeQualified(
-            new Path(uri.getScheme(), uri.getAuthority(), uri.getPath()));
+        Path frameworkPath = fs.makeQualified(new Path(uri.getScheme(), uri.getAuthority(), uri.getPath()));
 
         FileContext fc = FileContext.getFileContext(frameworkPath.toUri(), conf);
         frameworkPath = fc.resolvePath(frameworkPath);
@@ -68,10 +57,8 @@ public class YarnHelper {
         }
 
         FileStatus scFileStatus = fs.getFileStatus(frameworkPath);
-        LocalResource scRsrc = LocalResource.newInstance(
-            ConverterUtils.getYarnUrlFromURI(uri),
-            LocalResourceType.ARCHIVE, LocalResourceVisibility.PRIVATE,
-            scFileStatus.getLen(), scFileStatus.getModificationTime());
+        LocalResource scRsrc = LocalResource.newInstance(ConverterUtils.getYarnUrlFromURI(uri), LocalResourceType.ARCHIVE, LocalResourceVisibility.PRIVATE, scFileStatus.getLen(),
+            scFileStatus.getModificationTime());
         localResources.put(Constants.JAR_FILE_LINKED_NAME, scRsrc);
     }
 }

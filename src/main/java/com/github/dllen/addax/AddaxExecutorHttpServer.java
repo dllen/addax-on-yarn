@@ -1,27 +1,33 @@
 package com.github.dllen.addax;
 
+import com.github.dllen.addax.pojo.RespVo;
+import com.github.dllen.utils.NetworkUtils;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
+import com.google.common.util.concurrent.FutureCallback;
+import com.google.common.util.concurrent.Futures;
+import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
 import io.vertx.core.AbstractVerticle;
 import io.vertx.core.Future;
-import io.vertx.core.Promise;
-import io.vertx.core.Vertx;
-import io.vertx.core.VertxOptions;
 import io.vertx.core.http.HttpServer;
 import io.vertx.ext.web.Router;
+import io.vertx.ext.web.handler.BodyHandler;
+import io.vertx.ext.web.handler.LoggerHandler;
 import java.util.Map;
+import java.util.Timer;
+import java.util.TimerTask;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  *
  */
 public class AddaxExecutorHttpServer extends AbstractVerticle {
-
-    private final String masterAddr;
-    private final int port;
-    private HttpServer server;
 
     static final AtomicInteger ID_GEN = new AtomicInteger();
 
@@ -29,80 +35,112 @@ public class AddaxExecutorHttpServer extends AbstractVerticle {
     static final int STATUS_FREE = 0;
 
     static final AtomicInteger EXECUTOR_STATUS = new AtomicInteger(STATUS_FREE);
-
-    static final ScheduledExecutorService SCHEDULED_EXECUTOR_SERVICE = Executors.newScheduledThreadPool(1);
+    static final ExecutorService EXECUTOR_SERVICE = Executors.newFixedThreadPool(4);
     static final Map<String, Object> HEARTBEAT_BODY = Maps.newHashMap();
+    static final Logger LOGGER = LoggerFactory.getLogger(AddaxExecutorHttpServer.class);
+    static final Timer TIMER = new Timer();
+
+    private final String masterAddr;
+    private final int port;
+    private volatile AddaxPigeon addaxPigeon;
+
 
     public AddaxExecutorHttpServer(String masterAddr, int port, String containerId) {
         this.masterAddr = masterAddr;
         this.port = port;
+        String host = NetworkUtils.getHostName();
         HEARTBEAT_BODY.put("containerId", containerId);
         HEARTBEAT_BODY.put("port", port);
-        startHeartbeatTask();
+        HEARTBEAT_BODY.put("host", host);
+    }
+
+    private AddaxPigeon getAddaxPigeon() {
+        if (this.addaxPigeon == null) {
+            synchronized (this) {
+                if (this.addaxPigeon == null) {
+                    this.addaxPigeon = new AddaxPigeon(vertx);
+                }
+            }
+        }
+        return this.addaxPigeon;
     }
 
     //定期上报心跳信息: port, containerId...
-    public void startHeartbeatTask() {
-        SCHEDULED_EXECUTOR_SERVICE.scheduleWithFixedDelay(() -> AddaxPigeon.INSTANCE.sendHeartbeat(HEARTBEAT_BODY, masterAddr), 10, 30, TimeUnit.SECONDS);
+    private void initHeartbeatTask() {
+        TIMER.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                HEARTBEAT_BODY.put("status", EXECUTOR_STATUS.get());
+                HEARTBEAT_BODY.put("ts", System.currentTimeMillis());
+                getAddaxPigeon().sendHeartbeat(HEARTBEAT_BODY, masterAddr);
+            }
+        }, 10000, 3000);
     }
 
-    @Override
-    public void start(Promise<Void> startPromise) throws Exception {
-        super.start(startPromise);
+    private void initHttpServer() {
         String routePrefix = "/addax-executor/";
-        server = vertx.createHttpServer();
+        HttpServer server = vertx.createHttpServer();
         Router router = Router.router(vertx);
+        router.route().handler(LoggerHandler.create()).handler(BodyHandler.create());
+
         router.get(routePrefix + "status").respond(ctx -> Future.succeededFuture());
         router.post(routePrefix + "submit").respond(ctx -> {
             boolean canRun = EXECUTOR_STATUS.compareAndSet(STATUS_FREE, STATUS_DOING);
+            RespVo respVo = new RespVo();
+            respVo.setCode(500);
+            respVo.setMsg("error");
             if (canRun) {
                 String jobConf = ctx.getBodyAsString();
                 int jobId = ID_GEN.incrementAndGet();
-                Thread t = new Thread(() -> {
-                    Executor executor = new Executor(jobConf, masterAddr, jobId);
-                    executor.run();
-                    EXECUTOR_STATUS.compareAndSet(STATUS_DOING, STATUS_FREE);
+                final ListenableFuture<String> listenableFuture = MoreExecutors.listeningDecorator(EXECUTOR_SERVICE).submit(new ExecutorWorker(jobConf, masterAddr, jobId));
+                Futures.addCallback(listenableFuture, new FutureCallback<String>() {
+                    @Override
+                    public void onSuccess(String result) {
+                        EXECUTOR_STATUS.compareAndSet(STATUS_DOING, STATUS_FREE);
+                    }
+
+                    @Override
+                    public void onFailure(Throwable t) {
+                        EXECUTOR_STATUS.compareAndSet(STATUS_DOING, STATUS_FREE);
+                        LOGGER.error(t.getMessage(), t);
+                    }
                 });
-                t.start();
+                respVo.setData(ImmutableMap.of("jobId", jobId));
+                respVo.setCode(200);
+                respVo.setMsg("ok");
             }
-            return Future.failedFuture("稍后重试！");
+            return Future.succeededFuture(respVo);
         });
         server.requestHandler(router).listen(port);
     }
 
     @Override
-    public void stop(Promise<Void> stopPromise) throws Exception {
-        super.stop(stopPromise);
-        stop();
+    public void start() throws Exception {
+        initHeartbeatTask();
+        initHttpServer();
     }
 
-    public void start() {
-        vertx = Vertx.vertx(new VertxOptions());
-        vertx.deployVerticle(this);
+    @Override
+    public void stop() throws Exception {
     }
 
-    public void stop() {
-        if (server != null) {
-            server.close();
-        }
-    }
-
-    static class Executor implements Runnable {
+    static class ExecutorWorker implements Callable<String> {
 
         private final String jobConf;
         private final String reportAddr;
         private final int jobId;
 
-        public Executor(String jobConf, String reportAddr, int jobId) {
+        public ExecutorWorker(String jobConf, String reportAddr, int jobId) {
             this.jobConf = jobConf;
             this.reportAddr = reportAddr;
             this.jobId = jobId;
         }
 
         @Override
-        public void run() {
+        public String call() throws Exception {
             AddaxEngine addaxEngine = new AddaxEngine(reportAddr);
             addaxEngine.start(jobConf, jobId + "");
+            return "ok";
         }
     }
 }

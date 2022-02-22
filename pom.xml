@@ -20,6 +20,7 @@
 		<hadoop.version>2.6.5</hadoop.version>
 		<vertx.version>4.2.5</vertx.version>
 		<addax.version>4.0.7</addax.version>
+		<jackson.version>2.13.1</jackson.version>
 		<checkstyle.skip>true</checkstyle.skip>
 	</properties>
 
@@ -98,6 +99,21 @@
 			<groupId>com.wgzhao.addax</groupId>
 			<artifactId>addax-transformer</artifactId>
 			<version>${addax.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-databind</artifactId>
+			<version>${jackson.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-core</artifactId>
+			<version>${jackson.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>com.fasterxml.jackson.core</groupId>
+			<artifactId>jackson-annotations</artifactId>
+			<version>${jackson.version}</version>
 		</dependency>
 	</dependencies>
 
@@ -191,7 +207,9 @@
 								<filter>
 									<artifact>*:*</artifact>
 									<excludes>
+										<!--
 										<exclude>META-INF/</exclude>
+										-->
 										<exclude>LICENSE.txt</exclude>
 									</excludes>
 								</filter>

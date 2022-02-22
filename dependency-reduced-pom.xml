@@ -88,7 +88,6 @@
                 <filter>
                   <artifact>*:*</artifact>
                   <excludes>
-                    <exclude>META-INF/</exclude>
                     <exclude>LICENSE.txt</exclude>
                   </excludes>
                 </filter>
@@ -110,6 +109,7 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <hadoop.version>2.6.5</hadoop.version>
     <checkstyle.skip>true</checkstyle.skip>
+    <jackson.version>2.13.1</jackson.version>
   </properties>
 </project>
 
